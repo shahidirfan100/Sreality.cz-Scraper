@@ -1,0 +1,44 @@
+{
+  "title": "Sreality.cz Recommended Listings Scraper",
+  "description": "Extract recommended real-estate listings from Sreality.cz/doporucene with simple controls for output size.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrl": {
+      "title": "Start URL",
+      "type": "string",
+      "description": "Recommended listings page URL. Keep the default value unless Sreality changes the route.",
+      "editor": "textfield",
+      "prefill": "https://www.sreality.cz/doporucene"
+    },
+    "results_wanted": {
+      "title": "Maximum results",
+      "type": "integer",
+      "description": "Maximum number of listings to save.",
+      "minimum": 1,
+      "default": 20,
+      "prefill": 20,
+      "editor": "number"
+    },
+    "max_pages": {
+      "title": "Maximum pages",
+      "type": "integer",
+      "description": "Safety cap for paginated API requests.",
+      "minimum": 1,
+      "default": 10,
+      "prefill": 10,
+      "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Use Apify Proxy when running at scale or from blocked networks.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": false
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

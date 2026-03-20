@@ -1,0 +1,98 @@
+{
+  "actorSpecification": 1,
+  "fields": {},
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "estate_id",
+          "title",
+          "offer_type",
+          "category_main",
+          "category_sub",
+          "locality_text",
+          "price_czk",
+          "price_czk_m2",
+          "price_currency",
+          "primary_image_url",
+          "image_urls",
+          "images_count",
+          "agency_id",
+          "has_video",
+          "has_matterport",
+          "scraped_at"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "estate_id": {
+            "label": "Estate ID",
+            "format": "number"
+          },
+          "title": {
+            "label": "Title",
+            "format": "text"
+          },
+          "offer_type": {
+            "label": "Offer Type",
+            "format": "text"
+          },
+          "category_main": {
+            "label": "Main Category",
+            "format": "text"
+          },
+          "category_sub": {
+            "label": "Sub Category",
+            "format": "text"
+          },
+          "locality_text": {
+            "label": "Locality",
+            "format": "text"
+          },
+          "price_czk": {
+            "label": "Price CZK",
+            "format": "number"
+          },
+          "price_czk_m2": {
+            "label": "CZK/m2",
+            "format": "number"
+          },
+          "price_currency": {
+            "label": "Currency",
+            "format": "text"
+          },
+          "primary_image_url": {
+            "label": "Image",
+            "format": "image"
+          },
+          "image_urls": {
+            "label": "Image URLs",
+            "format": "text"
+          },
+          "images_count": {
+            "label": "Images",
+            "format": "number"
+          },
+          "agency_id": {
+            "label": "Agency ID",
+            "format": "number"
+          },
+          "has_video": {
+            "label": "Video",
+            "format": "boolean"
+          },
+          "has_matterport": {
+            "label": "Matterport",
+            "format": "boolean"
+          },
+          "scraped_at": {
+            "label": "Scraped At",
+            "format": "date"
+          }
+        }
+      }
+    }
+  }
+}
