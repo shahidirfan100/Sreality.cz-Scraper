@@ -3,16 +3,118 @@ import { Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
 
 const DEFAULT_START_URL = 'https://www.sreality.cz/doporucene';
-const API_BASE_URL = 'https://www.sreality.cz/api/v1/estates/recommended';
+const RECOMMENDED_API_URL = 'https://www.sreality.cz/api/v1/estates/recommended';
+const SEARCH_API_URL = 'https://www.sreality.cz/api/v1/estates/search';
+const LOCALITIES_SUGGEST_URL = 'https://www.sreality.cz/api/v1/localities/suggest';
 const API_LANG = 'cs';
 const ITEMS_PER_PAGE = 24;
 const INCLUDE_CLUSTERS_BBOX = true;
 const PUSH_BATCH_SIZE = 100;
 const PUBLIC_IMAGE_TRANSFORM = 'res,300,300,1|jpg,80';
+const SUPPORTED_SORTS = new Set(['-date', 'price_asc', 'price_desc', 'price_m2_asc', 'price_m2_desc']);
 
 const toPositiveInt = (value, fallback) => {
     const parsed = Number.parseInt(value, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const toOptionalNonNegativeNumber = (value) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const toOptionalText = (value) => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const fetchJson = async (url, referer, description) => {
+    try {
+        const response = await gotScraping({
+            url,
+            method: 'GET',
+            timeout: { request: 30_000 },
+            headers: {
+                accept: 'application/json, text/plain, */*',
+                'accept-language': 'cs-CZ,cs;q=0.9,en-US;q=0.8,en;q=0.7',
+                referer,
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
+            },
+        });
+        return JSON.parse(response.body);
+    } catch (error) {
+        throw new Error(`Failed to fetch or parse ${description}: ${error.message}`);
+    }
+};
+
+const resolveLocation = async (location, referer) => {
+    const params = new URLSearchParams({
+        variant: 'phrase',
+        phrase: location,
+        lang: API_LANG,
+        limit: '10',
+    });
+    const payload = await fetchJson(`${LOCALITIES_SUGGEST_URL}?${params.toString()}`, referer, 'location suggestions');
+    const suggestion = payload.results?.find((entry) => entry?.userData?.entityType && entry.userData.id);
+
+    if (!suggestion) {
+        throw new Error(`No Sreality location matched "${location}".`);
+    }
+
+    const { userData } = suggestion;
+    return {
+        countryId: userData.country_id,
+        entityType: userData.entityType,
+        entityId: userData.id,
+        label: userData.suggestFirstRow || location,
+    };
+};
+
+const buildQuery = (input, resultsWanted, offset, resolvedLocation) => {
+    const keyword = toOptionalText(input.keyword);
+    const location = toOptionalText(input.location);
+    const sort = toOptionalText(input.sort);
+    const offerType = input.offer_type ?? input.offerType;
+    const categoryMain = input.category_main ?? input.categoryMain;
+    const priceFrom = toOptionalNonNegativeNumber(input.price_from ?? input.priceFrom);
+    const priceTo = toOptionalNonNegativeNumber(input.price_to ?? input.priceTo);
+
+    if (sort && !SUPPORTED_SORTS.has(sort)) {
+        throw new Error(`Unsupported sort "${sort}". Use one of: ${[...SUPPORTED_SORTS].join(', ')}.`);
+    }
+
+    if (priceFrom !== undefined && priceTo !== undefined && priceFrom > priceTo) {
+        throw new Error('price_from cannot be greater than price_to.');
+    }
+
+    const usesSearchFilters = Boolean(keyword || location || sort || offerType !== undefined || categoryMain !== undefined || priceFrom !== undefined || priceTo !== undefined);
+    const apiUrl = usesSearchFilters ? SEARCH_API_URL : RECOMMENDED_API_URL;
+    const params = new URLSearchParams({
+        lang: API_LANG,
+        limit: String(Math.min(ITEMS_PER_PAGE, resultsWanted)),
+        offset: String(offset),
+    });
+
+    if (!usesSearchFilters) {
+        params.set('include_clusters_bbox', String(Boolean(INCLUDE_CLUSTERS_BBOX)));
+    } else {
+        if (keyword) params.set('description_search', keyword);
+        if (sort) params.set('sort', sort);
+        if (offerType !== undefined) params.set('category_type_cb', String(offerType));
+        if (categoryMain !== undefined) params.set('category_main_cb', String(categoryMain));
+        if (priceFrom !== undefined) params.set('price_from', String(priceFrom));
+        if (priceTo !== undefined) params.set('price_to', String(priceTo));
+
+        if (location) {
+            params.set('locality_country_id', String(resolvedLocation.countryId));
+            params.set('locality_entity_type', resolvedLocation.entityType);
+            params.set('locality_entity_id', String(resolvedLocation.entityId));
+        }
+    }
+
+    return { apiUrl, apiUrlWithParams: `${apiUrl}?${params.toString()}`, usesSearchFilters };
 };
 
 const toImageUrl = (value) => {
@@ -164,10 +266,9 @@ try {
     const sourceUrl = input.startUrl || input.start_url || DEFAULT_START_URL;
     const resultsWanted = toPositiveInt(input.results_wanted ?? input.resultsWanted, 20);
     const maxPages = toPositiveInt(input.max_pages ?? input.maxPages, 10);
-
-    const proxyConfiguration = input.proxyConfiguration
-        ? await Actor.createProxyConfiguration(input.proxyConfiguration)
-        : undefined;
+    const location = toOptionalText(input.location);
+    const resolvedLocation = location ? await resolveLocation(location, sourceUrl) : undefined;
+    if (resolvedLocation) log.info(`Using Sreality location: ${resolvedLocation.label}.`);
 
     const seenEstateIds = new Set();
     const bufferedItems = [];
@@ -177,35 +278,10 @@ try {
     while (bufferedItems.length < resultsWanted && page < maxPages) {
         page += 1;
         const limit = Math.min(ITEMS_PER_PAGE, resultsWanted - bufferedItems.length);
-        const params = new URLSearchParams({
-            include_clusters_bbox: String(Boolean(INCLUDE_CLUSTERS_BBOX)),
-            lang: API_LANG,
-            limit: String(limit),
-            offset: String(offset),
-        });
-        const apiUrl = `${API_BASE_URL}?${params.toString()}`;
-        const proxyUrl = proxyConfiguration ? await proxyConfiguration.newUrl() : undefined;
+        const { apiUrlWithParams } = buildQuery(input, limit, offset, resolvedLocation);
 
         log.info(`Processing page ${page}`);
-
-        let payload;
-        try {
-            const response = await gotScraping({
-                url: apiUrl,
-                method: 'GET',
-                proxyUrl,
-                timeout: { request: 30_000 },
-                headers: {
-                    accept: 'application/json, text/plain, */*',
-                    'accept-language': 'cs-CZ,cs;q=0.9,en-US;q=0.8,en;q=0.7',
-                    referer: sourceUrl,
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
-                },
-            });
-            payload = JSON.parse(response.body);
-        } catch (error) {
-            throw new Error(`Failed to fetch or parse API response on page ${page}: ${error.message}`);
-        }
+        const payload = await fetchJson(apiUrlWithParams, sourceUrl, `listing response on page ${page}`);
 
         const estates = Array.isArray(payload.results) ? payload.results : [];
         if (estates.length === 0) {

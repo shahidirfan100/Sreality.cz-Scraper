@@ -21,6 +21,19 @@
   - `limit=<n>`
   - `offset=<n>`
 
+## Filtered Search API
+- Endpoint: `https://www.sreality.cz/api/v1/estates/search`
+- Used when the Actor receives supported search filters.
+- Confirmed query parameters:
+  - `description_search` for the Actor's `keyword` input
+  - `locality_country_id`, `locality_entity_type`, and `locality_entity_id` for a resolved `location`
+  - `category_type_cb` for `offer_type`
+  - `category_main_cb` for `category_main`
+  - `price_from` and `price_to` for price bounds
+  - `sort` values `-date`, `price_asc`, `price_desc`, `price_m2_asc`, and `price_m2_desc`
+  - `lang`, `limit`, and `offset`
+- Location names are resolved through `https://www.sreality.cz/api/v1/localities/suggest` before the listing request.
+
 ## How It Was Found
 - Parsed `__NEXT_DATA__` from the target page.
 - Confirmed query key: `estatesRecommended` with pagination metadata.
@@ -46,4 +59,4 @@
 | **Total** | **100** |
 
 ## Result
-Selected endpoint score is `100` (>= 50 threshold), so API-based extraction is used as the production strategy.
+The recommended endpoint remains the default production path. The filtered search endpoint is used only when a supported filter is present, so each input maps to a confirmed request parameter instead of being silently ignored.

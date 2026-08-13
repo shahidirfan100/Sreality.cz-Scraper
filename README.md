@@ -1,88 +1,78 @@
-# Sreality.cz Recommended Listings Scraper
+## What does Sreality.cz Scraper do?
 
-Extract recommended property listings from Sreality.cz in a structured dataset. Collect pricing, location, category, media, agency, and nearby amenities data for each listing. This scraper is built for fast recurring collection and reliable market monitoring.
+Sreality.cz Scraper collects structured Czech real-estate listings from Sreality.cz. A basic run collects recommended listings, while optional keyword, location, category, price, and sorting inputs let you create a more focused property dataset.
 
-## Features
+The dataset includes listing titles, sale or rental information, categories, prices in CZK, locality details, coordinates, agency information, images, media flags, and distances to nearby amenities. Use the results for property market research, price monitoring, agency lead generation, investment analysis, or recurring listing reports.
 
-- **Recommended listings extraction** - Collects data from `https://www.sreality.cz/doporucene`.
-- **Rich property attributes** - Includes categories, offer type, pricing, and location fields.
-- **Media coverage** - Returns primary image, full image list, and media flags.
-- **Embeddable image URLs** - Uses the same public transformed image URLs that Sreality serves on-page, avoiding blocked raw CDN links.
-- **Agency and seller context** - Captures agency identifiers, branding, and seller ID fields.
-- **Clean output quality** - Removes null and empty values before saving records.
-- **Pagination support** - Collects multiple pages until the requested result count is reached.
+## Why use Sreality.cz Scraper?
 
-## Use Cases
+- **Property market research** - Compare current listings by location, category, price, and offer type.
+- **Focused collection** - Search for a keyword or resolve a Czech location such as Brno or Praha.
+- **Price analysis** - Collect total prices and price-per-square-meter values for benchmarking.
+- **Agency research** - Identify agencies, agency pages, logos, and seller IDs connected with listings.
+- **Media review** - Check image counts and whether video or Matterport media is available.
+- **Automation-ready data** - Export the dataset as JSON, CSV, Excel, XML, or connect it to downstream workflows.
 
-### Property Market Research
-Track what kinds of homes and commercial listings are currently promoted as recommended. Use this to identify active categories, price bands, and regional distribution.
+## What data can you extract from Sreality.cz?
 
-### Lead Intelligence
-Build a fresh list of agencies and promoted listings for prospecting, outreach, or CRM enrichment.
+| Field | Description |
+|-------|-------------|
+| `estate_id` | Unique Sreality listing identifier |
+| `title` | Listing headline |
+| `offer_type` | Sale or rental offer label |
+| `category_main` | Main property category |
+| `category_sub` | Property sub-category |
+| `locality_text` | Combined locality text |
+| `location_city` | City or municipality |
+| `location_district` | District |
+| `location_region` | Region |
+| `location_latitude` | Latitude when published by Sreality |
+| `location_longitude` | Longitude when published by Sreality |
+| `price_czk` | Total price in Czech koruna |
+| `price_czk_m2` | Price per square meter in Czech koruna |
+| `price_summary` | Display price summary |
+| `price_currency` | Currency label |
+| `agency_id` | Agency identifier |
+| `agency_slug` | Agency page slug |
+| `has_video` | Whether the listing has video |
+| `has_matterport` | Whether Matterport-style media is available |
+| `primary_image_url` | First available listing image |
+| `image_urls` | All cleaned listing image URLs |
+| `images_count` | Number of available images |
+| `poi_*_distance_m` | Distance to a nearby service in meters |
+| `source_url` | Input Sreality page URL |
+| `scraped_at` | ISO timestamp for the saved record |
 
-### Pricing Analysis
-Monitor recommended listing prices by city, district, and category to benchmark current market positioning.
+## How to use Sreality.cz Scraper
 
-### Media and Content Audits
-Analyze how many photos listings include and where video or virtual-tour style media is present.
+1. Open the Actor in Apify Console.
+2. Keep the default start URL for recommended listings, or add supported filters.
+3. Set the maximum results and page limit.
+4. Run the Actor and review the dataset preview.
+5. Download the results or connect the dataset to your workflow.
 
-### Local Opportunity Discovery
-Use nearby amenity distance fields to filter listings by transportation, schools, shops, and services.
-
----
+When `keyword`, `location`, `sort`, offer type, category, or price is provided, the Actor collects matching searchable listings. Without those inputs, it keeps the recommended-listings workflow.
 
 ## Input Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `startUrl` | String | No | `"https://www.sreality.cz/doporucene"` | Source page for recommended listings. |
+| `startUrl` | String | No | `https://www.sreality.cz/doporucene` | Sreality page used as the source reference. |
 | `results_wanted` | Integer | No | `20` | Maximum number of listings to save. |
-| `max_pages` | Integer | No | `10` | Safety cap for paginated requests. |
-| `proxyConfiguration` | Object | No | `{ "useApifyProxy": false }` | Optional proxy setup for stable large runs. |
-
----
-
-## Output Data
-
-Each dataset item can contain the following fields:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `estate_id` | Integer | Unique listing ID. |
-| `title` | String | Listing headline. |
-| `offer_type` | String | Offer type (for example sale or rent). |
-| `category_main` | String | Main listing category. |
-| `category_sub` | String | Listing sub-category. |
-| `locality_text` | String | Combined city, district, region, and country text. |
-| `location_city` | String | City name. |
-| `location_district` | String | District name. |
-| `location_region` | String | Region name. |
-| `location_country` | String | Country name. |
-| `location_latitude` | Number | Latitude coordinate. |
-| `location_longitude` | Number | Longitude coordinate. |
-| `price_czk` | Number | Total listing price in CZK. |
-| `price_czk_m2` | Number | Price per m2 in CZK. |
-| `price_currency` | String | Price currency symbol/name. |
-| `price_unit` | String | Price unit text. |
-| `has_video` | Boolean | Listing has video media. |
-| `has_matterport` | Boolean | Listing has virtual-tour media flag. |
-| `agency_id` | Integer | Agency identifier. |
-| `agency_slug` | String | Agency slug value. |
-| `agency_logo_url` | String | Agency logo URL. |
-| `image_urls` | Array[String] | Cleaned image URLs as a JSON array. |
-| `images_count` | Integer | Number of image URLs available for the listing. |
-| `primary_image_url` | String | First image URL. |
-| `poi_*_distance_m` | Number | Distance to nearby amenities in meters. |
-| `source_url` | String | Input source URL. |
-| `scraped_at` | String | ISO timestamp of extraction. |
-
----
+| `max_pages` | Integer | No | `10` | Maximum number of result pages to process. |
+| `keyword` | String | No | - | Text to search in Sreality listings. |
+| `location` | String | No | - | Czech location name, such as `Brno` or `Praha`. |
+| `sort` | String | No | - | `-date`, `price_asc`, `price_desc`, `price_m2_asc`, or `price_m2_desc`. |
+| `offer_type` | Integer | No | - | `1` for sale or `2` for rent. |
+| `category_main` | Integer | No | - | Sreality main category ID. |
+| `price_from` | Number | No | - | Minimum price, normally in CZK. |
+| `price_to` | Number | No | - | Maximum price, normally in CZK. |
 
 ## Usage Examples
 
-### Basic Run
+### Basic Recommended Listings
 
-Collect the first 20 recommended listings.
+Collect the first 20 recommended listings from Sreality.cz.
 
 ```json
 {
@@ -91,34 +81,33 @@ Collect the first 20 recommended listings.
 }
 ```
 
-### Expanded Collection
+### Keyword and Location Search
 
-Collect more data across additional pages.
+Collect listings matching a keyword in a resolved Czech location.
 
 ```json
 {
-  "startUrl": "https://www.sreality.cz/doporucene",
-  "results_wanted": 120,
+  "keyword": "rodinný dům",
+  "location": "Brno",
+  "results_wanted": 50,
+  "max_pages": 5
+}
+```
+
+### Price and Sorting Filters
+
+Collect sale listings within a price range, ordered from the lowest price.
+
+```json
+{
+  "offer_type": 1,
+  "price_from": 2000000,
+  "price_to": 8000000,
+  "sort": "price_asc",
+  "results_wanted": 100,
   "max_pages": 10
 }
 ```
-
-### Proxy-Enabled Run
-
-Use Apify Proxy for large-scale recurring jobs.
-
-```json
-{
-  "startUrl": "https://www.sreality.cz/doporucene",
-  "results_wanted": 100,
-  "proxyConfiguration": {
-    "useApifyProxy": true,
-    "apifyProxyGroups": ["RESIDENTIAL"]
-  }
-}
-```
-
----
 
 ## Sample Output
 
@@ -145,93 +134,72 @@ Use Apify Proxy for large-scale recurring jobs.
   "has_matterport": false,
   "agency_id": 34573,
   "agency_slug": "ostrov-realit",
-  "agency_logo_url": "https://d48-a.sdn.cz/d_48/c_img_QQ_b/lfCE3.png",
   "primary_image_url": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtDgLT0unF8i3ga/98f6.jpeg",
   "images_count": 3,
   "image_urls": [
-    "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtDgLT0unF8i3ga/98f6.jpeg",
-    "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtEBMvIyEF8i3hB/94ad.jpeg",
-    "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtEDuRm2HF8i3hn/32ba.jpeg"
+    "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtDgLT0unF8i3ga/98f6.jpeg"
   ],
-  "poi_bus_public_transport_distance_m": 261,
   "poi_school_distance_m": 36,
   "source_url": "https://www.sreality.cz/doporucene",
   "scraped_at": "2026-03-20T06:45:00.000Z"
 }
 ```
 
----
-
 ## Tips for Best Results
 
-### Start with QA-Friendly Limits
-- Use `results_wanted: 20` for quick test runs.
-- Increase limits only after confirming output quality.
+- Start with `results_wanted: 20` to confirm the selected filters and output quality.
+- Use a specific location name for more focused results. The Actor stops with a clear error if Sreality cannot resolve the location.
+- Use the exact sort values listed in the input table.
+- Keep `price_from` lower than or equal to `price_to`.
+- Use `max_pages` as a safety limit for larger scheduled runs.
+- Some fields are empty when the original listing does not publish that information.
 
-### Balance Throughput and Stability
-- The actor uses an internal safe page size for stable collection.
-- Use `max_pages` to prevent unexpectedly long runs.
+## Integrations and Export Formats
 
-### Use Proxies for Scale
-- Enable proxies for frequent scheduled runs.
-- Prefer residential pools in stricter network environments.
+- **Apify API** - Read datasets programmatically after a run.
+- **Google Sheets** - Review prices and locations in a spreadsheet.
+- **Airtable** - Maintain a searchable property table.
+- **Make or Zapier** - Trigger notifications and downstream workflows.
+- **Webhooks** - Send run completion events to your own systems.
 
-### Filter by Useful Fields Post-Run
-- Use `category_main`, `category_sub`, and price fields for segmentation.
-- Use amenity distance fields to prioritize practical locations.
-
----
-
-## Integrations
-
-Connect your data with:
-
-- **Google Sheets** - Build quick dashboards for listing trends.
-- **Airtable** - Maintain searchable property datasets.
-- **Make** - Automate post-processing and notifications.
-- **Zapier** - Trigger downstream workflows from fresh runs.
-- **Webhooks** - Send data to custom systems.
-
-### Export Formats
-
-- **JSON** - Full structured records.
-- **CSV** - Spreadsheet-friendly analysis.
-- **Excel** - Business reporting and sharing.
-- **XML** - Legacy system integration.
-
----
+Apify datasets can be downloaded as JSON, CSV, Excel, XML, and other supported formats.
 
 ## Frequently Asked Questions
 
-### How many listings can I collect?
-You can collect as many as are available, bounded by your `results_wanted`, `max_pages`, and platform limits.
+### Can I collect only sale or rental listings?
 
-### Does the actor remove empty fields?
-Yes. Null and empty values are removed before each record is saved.
+Yes. Set `offer_type` to `1` for sale or `2` for rent.
 
-### Can I run this on a schedule?
-Yes. It is suitable for scheduled runs and recurring market tracking.
+### Can I filter listings by location?
 
-### What if the website structure changes?
-If source responses change, output fields may change. Re-run validation and update mapping when needed.
+Yes. Enter a Czech location name in `location`, such as `Brno` or `Praha`. The Actor resolves the name and applies it to the listing search.
 
-### Is proxy required?
-Not always. For higher-volume or repetitive usage, proxy configuration is recommended.
+### Which sorting values are supported?
 
----
+The supported values are `-date`, `price_asc`, `price_desc`, `price_m2_asc`, and `price_m2_desc`.
+
+### Can I run this Actor on a schedule?
+
+Yes. Schedule recurring runs in Apify Console for property monitoring, price tracking, or regular dataset refreshes.
+
+### Can I export Sreality data to CSV or Excel?
+
+Yes. Download the dataset in CSV, Excel, JSON, XML, or another Apify-supported format.
+
+### Is it legal to collect Sreality data?
+
+You are responsible for complying with Sreality terms, applicable laws, privacy requirements, and any restrictions that apply to your use of the collected data.
+
+## Related Actors
+
+- [Housing.com Property Scraper](https://apify.com/shahidirfan/housing-com-property-scraper) - Collect property listings from Housing.com.
+- [Otodom.pl Property Scraper](https://apify.com/shahidirfan/otodom-pl-property-scraper) - Collect Polish property listings from Otodom.pl.
+- [Flatfox.ch Property Scraper](https://apify.com/shahidirfan/flatfox-ch-property-scraper) - Collect property listings from Flatfox.ch.
 
 ## Support
 
-For issues or feature requests, open the actor in Apify Console and use the Issues or support workflow.
-
-### Resources
-
-- [Apify Documentation](https://docs.apify.com/)
-- [Apify API Reference](https://docs.apify.com/api/v2)
-- [Apify Scheduling](https://docs.apify.com/platform/schedules)
-
----
+For issues or feature requests, use the Issues tab on the Actor page and include the input, run ID, and a short description of the observed result.
 
 ## Legal Notice
 
-This actor is intended for legitimate data collection use cases. You are responsible for compliance with Sreality terms, applicable laws, and responsible data usage policies.
+This Actor is intended for legitimate collection of publicly available real-estate information. Users are responsible for responsible use of the output and compliance with Sreality terms and applicable laws.

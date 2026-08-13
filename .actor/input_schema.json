@@ -1,6 +1,6 @@
 {
-  "title": "Sreality.cz Recommended Listings Scraper",
-  "description": "Extract recommended real-estate listings from Sreality.cz/doporucene with simple controls for output size.",
+  "title": "Sreality.cz Scraper",
+  "description": "Extract recommended or filtered real-estate listings from Sreality.cz with keyword, location, sorting, category, and price controls.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -10,6 +10,65 @@
       "description": "Recommended listings page URL. Keep the default value unless Sreality changes the route.",
       "editor": "textfield",
       "prefill": "https://www.sreality.cz/doporucene"
+    },
+    "keyword": {
+      "title": "Keyword",
+      "type": "string",
+      "description": "Optional text to search in Sreality listings.",
+      "editor": "textfield"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string",
+      "description": "Optional Czech location name such as Brno or Praha. The location is resolved before listings are collected.",
+      "editor": "textfield"
+    },
+    "sort": {
+      "title": "Sort order",
+      "type": "string",
+      "description": "Optional listing order. Set a value to use filtered search mode.",
+      "enum": [
+        "-date",
+        "price_asc",
+        "price_desc",
+        "price_m2_asc",
+        "price_m2_desc"
+      ],
+      "enumTitles": [
+        "Newest",
+        "Lowest price",
+        "Highest price",
+        "Lowest price per m2",
+        "Highest price per m2"
+      ],
+      "editor": "select"
+    },
+    "offer_type": {
+      "title": "Offer type",
+      "type": "integer",
+      "description": "Optional offer type: 1 for sale or 2 for rent.",
+      "editor": "number"
+    },
+    "category_main": {
+      "title": "Main category ID",
+      "type": "integer",
+      "description": "Optional Sreality main category ID for filtered search mode.",
+      "minimum": 1,
+      "editor": "number"
+    },
+    "price_from": {
+      "title": "Minimum price",
+      "type": "number",
+      "description": "Optional minimum price in the listing currency, normally CZK.",
+      "minimum": 0,
+      "editor": "number"
+    },
+    "price_to": {
+      "title": "Maximum price",
+      "type": "number",
+      "description": "Optional maximum price in the listing currency, normally CZK.",
+      "minimum": 0,
+      "editor": "number"
     },
     "results_wanted": {
       "title": "Maximum results",
@@ -28,15 +87,6 @@
       "default": 10,
       "prefill": 10,
       "editor": "number"
-    },
-    "proxyConfiguration": {
-      "title": "Proxy configuration",
-      "type": "object",
-      "description": "Use Apify Proxy when running at scale or from blocked networks.",
-      "editor": "proxy",
-      "default": {
-        "useApifyProxy": false
-      }
     }
   },
   "required": [],
