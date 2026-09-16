@@ -1,15 +1,20 @@
 import { Actor, log } from 'apify';
 import { Dataset } from 'crawlee';
-import { gotScraping } from 'got-scraping';
+import { Impit } from 'impit';
 
 const DEFAULT_START_URL = 'https://www.sreality.cz/doporucene';
-const RECOMMENDED_API_URL = 'https://www.sreality.cz/api/v1/estates/recommended';
-const SEARCH_API_URL = 'https://www.sreality.cz/api/v1/estates/search';
-const LOCALITIES_SUGGEST_URL = 'https://www.sreality.cz/api/v1/localities/suggest';
+const SREALITY_WWW_ORIGIN = 'https://www.sreality.cz';
+const SREALITY_DIRECT_ORIGIN = 'https://sreality.cz';
+const RECOMMENDED_API_URL = `${SREALITY_WWW_ORIGIN}/api/v1/estates/recommended`;
+const SEARCH_API_URL = `${SREALITY_WWW_ORIGIN}/api/v1/estates/search`;
+const LOCALITIES_SUGGEST_URL = `${SREALITY_WWW_ORIGIN}/api/v1/localities/suggest`;
 const API_LANG = 'cs';
 const ITEMS_PER_PAGE = 24;
 const INCLUDE_CLUSTERS_BBOX = true;
 const PUSH_BATCH_SIZE = 100;
+const MAX_REQUEST_RETRIES = 2;
+const MAX_RETRY_DELAY_MS = 5_000;
+const RETRYABLE_ERROR_CODES = new Set(['ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH']);
 const PUBLIC_IMAGE_TRANSFORM = 'res,300,300,1|jpg,80';
 const SUPPORTED_SORTS = new Set(['-date', 'price_asc', 'price_desc', 'price_m2_asc', 'price_m2_desc']);
 
@@ -30,34 +35,121 @@ const toOptionalText = (value) => {
     return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const fetchJson = async (url, referer, description) => {
-    try {
-        const response = await gotScraping({
-            url,
-            method: 'GET',
-            timeout: { request: 30_000 },
-            headers: {
-                accept: 'application/json, text/plain, */*',
-                'accept-language': 'cs-CZ,cs;q=0.9,en-US;q=0.8,en;q=0.7',
-                referer,
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
-            },
-        });
-        return JSON.parse(response.body);
-    } catch (error) {
-        throw new Error(`Failed to fetch or parse ${description}: ${error.message}`);
-    }
+const wait = (milliseconds) => new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+});
+
+const getResponseStatus = (error) => error?.statusCode ?? error?.response?.statusCode;
+
+const getDirectHostFallbackUrl = (url) => {
+    if (!url.startsWith(`${SREALITY_WWW_ORIGIN}/api/`)) return undefined;
+    return `${SREALITY_DIRECT_ORIGIN}${url.slice(SREALITY_WWW_ORIGIN.length)}`;
 };
 
-const resolveLocation = async (location, referer) => {
+const isRetryableError = (error) => {
+    const statusCode = getResponseStatus(error);
+    return (statusCode === 408 || statusCode === 429 || statusCode >= 500) || RETRYABLE_ERROR_CODES.has(error?.code);
+};
+
+const getRetryDelay = (error, attempt) => {
+    const retryAfterHeader = error?.retryAfter ?? error?.response?.headers?.['retry-after'];
+    const retryAfterSeconds = Number(retryAfterHeader);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+        return Math.min(retryAfterSeconds * 1_000, MAX_RETRY_DELAY_MS);
+    }
+
+    const retryAfterDate = Date.parse(retryAfterHeader);
+    if (Number.isFinite(retryAfterDate)) {
+        return Math.min(Math.max(0, retryAfterDate - Date.now()), MAX_RETRY_DELAY_MS);
+    }
+
+    const backoff = Math.min(1_000 * 2 ** attempt, MAX_RETRY_DELAY_MS);
+    return Math.min(backoff + Math.floor(Math.random() * 250), MAX_RETRY_DELAY_MS);
+};
+
+const fetchJson = async (client, url, referer, description) => {
+    let lastError;
+    let requestUrl = url;
+    let usedDirectHostFallback = false;
+
+    for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt += 1) {
+        try {
+            const response = await client.fetch(requestUrl, {
+                method: 'GET',
+                headers: {
+                    referer,
+                },
+            });
+
+            const statusCode = response?.status;
+            if (!response || typeof response.json !== 'function') {
+                throw new Error(`${description} returned an invalid response.`);
+            }
+            if (!Number.isInteger(statusCode) || statusCode < 200 || statusCode >= 300) {
+                const error = new Error(`${description} returned HTTP ${statusCode ?? 'unknown'}.`);
+                error.statusCode = statusCode;
+                error.retryAfter = response.headers?.get?.('retry-after');
+                throw error;
+            }
+
+            const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+            if (contentType && !contentType.includes('json')) {
+                throw new Error(`${description} returned ${contentType} instead of JSON.`);
+            }
+
+            let payload;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                throw new Error(`${description} contained invalid JSON: ${error.message}`);
+            }
+
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                throw new Error(`${description} returned an unexpected JSON value.`);
+            }
+
+            return payload;
+        } catch (error) {
+            lastError = error;
+            const statusCode = getResponseStatus(error);
+            if (statusCode === 404 && !usedDirectHostFallback) {
+                const fallbackUrl = getDirectHostFallbackUrl(requestUrl);
+                if (fallbackUrl) {
+                    usedDirectHostFallback = true;
+                    requestUrl = fallbackUrl;
+                    log.warning(`Retrying ${description} on Sreality's direct host after HTTP 404.`);
+                    continue;
+                }
+            }
+
+            if (attempt >= MAX_REQUEST_RETRIES || !isRetryableError(error)) break;
+
+            const nextAttempt = attempt + 1;
+            const reason = statusCode ? `HTTP ${statusCode}` : error.code || error.message;
+            log.warning(`Retrying ${description} (${nextAttempt}/${MAX_REQUEST_RETRIES}) after ${reason}.`);
+            await wait(getRetryDelay(error, attempt));
+        }
+    }
+
+    const statusCode = getResponseStatus(lastError);
+    const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+    throw new Error(`Failed to fetch or parse ${description}${statusSuffix}: ${lastError?.message || 'unknown error'}`);
+};
+
+const resolveLocation = async (client, location, referer) => {
     const params = new URLSearchParams({
         variant: 'phrase',
         phrase: location,
         lang: API_LANG,
         limit: '10',
     });
-    const payload = await fetchJson(`${LOCALITIES_SUGGEST_URL}?${params.toString()}`, referer, 'location suggestions');
-    const suggestion = payload.results?.find((entry) => entry?.userData?.entityType && entry.userData.id);
+    const payload = await fetchJson(client, `${LOCALITIES_SUGGEST_URL}?${params.toString()}`, referer, 'location suggestions');
+    if (!Array.isArray(payload.results)) {
+        log.warning(`Location suggestions response has no results array. Response keys: ${Object.keys(payload).join(', ')}.`);
+        throw new Error(`Location suggestions for "${location}" returned an unexpected response.`);
+    }
+
+    const suggestion = payload.results.find((entry) => entry?.userData?.entityType && entry.userData.id);
 
     if (!suggestion) {
         throw new Error(`No Sreality location matched "${location}".`);
@@ -261,36 +353,55 @@ const mapEstate = (estate, sourceUrl) => {
 
 await Actor.init();
 
+let exitCode = 0;
+
 try {
     const input = (await Actor.getInput()) || {};
-    const sourceUrl = input.startUrl || input.start_url || DEFAULT_START_URL;
+    const sourceUrl = toOptionalText(input.startUrl ?? input.start_url) || DEFAULT_START_URL;
     const resultsWanted = toPositiveInt(input.results_wanted ?? input.resultsWanted, 20);
     const maxPages = toPositiveInt(input.max_pages ?? input.maxPages, 10);
+    const proxyConfiguration = input.proxyConfiguration
+        ? await Actor.createProxyConfiguration(input.proxyConfiguration)
+        : undefined;
+    const proxyUrl = proxyConfiguration ? await proxyConfiguration.newUrl() : undefined;
+    const client = new Impit({
+        browser: 'chrome',
+        ...(proxyUrl && { proxyUrl }),
+    });
     const location = toOptionalText(input.location);
-    const resolvedLocation = location ? await resolveLocation(location, sourceUrl) : undefined;
+    const resolvedLocation = location ? await resolveLocation(client, location, sourceUrl) : undefined;
     if (resolvedLocation) log.info(`Using Sreality location: ${resolvedLocation.label}.`);
 
     const seenEstateIds = new Set();
-    const bufferedItems = [];
+    let totalSaved = 0;
     let page = 0;
     let offset = 0;
 
-    while (bufferedItems.length < resultsWanted && page < maxPages) {
+    while (totalSaved < resultsWanted && page < maxPages) {
         page += 1;
-        const limit = Math.min(ITEMS_PER_PAGE, resultsWanted - bufferedItems.length);
+        const limit = ITEMS_PER_PAGE;
         const { apiUrlWithParams } = buildQuery(input, limit, offset, resolvedLocation);
 
-        log.info(`Processing page ${page}`);
-        const payload = await fetchJson(apiUrlWithParams, sourceUrl, `listing response on page ${page}`);
+        const payload = await fetchJson(client, apiUrlWithParams, sourceUrl, `listing response on page ${page}`);
 
-        const estates = Array.isArray(payload.results) ? payload.results : [];
+        if (!Array.isArray(payload.results)) {
+            log.warning(`Listing response on page ${page} has no results array. Response keys: ${Object.keys(payload).join(', ')}.`);
+            break;
+        }
+
+        const estates = payload.results;
         if (estates.length === 0) {
             log.info('No more estates returned. Stopping collection.');
             break;
         }
 
-        let addedFromPage = 0;
+        const pageItems = [];
         for (const estate of estates) {
+            if (!estate || typeof estate !== 'object') {
+                log.warning(`Skipping malformed listing on page ${page}.`);
+                continue;
+            }
+
             const estateId = estate.hash_id ? String(estate.hash_id) : undefined;
             if (estateId && seenEstateIds.has(estateId)) continue;
             if (estateId) seenEstateIds.add(estateId);
@@ -298,27 +409,30 @@ try {
             const mapped = mapEstate(estate, sourceUrl);
             if (!mapped) continue;
 
-            bufferedItems.push(mapped);
-            addedFromPage += 1;
-            if (bufferedItems.length >= resultsWanted) break;
+            pageItems.push(mapped);
+            if (totalSaved + pageItems.length >= resultsWanted) break;
         }
 
-        log.info(`Collected ${addedFromPage} listings from page ${page}.`);
+        for (let i = 0; i < pageItems.length; i += PUSH_BATCH_SIZE) {
+            const batch = pageItems.slice(i, i + PUSH_BATCH_SIZE);
+            await Dataset.pushData(batch);
+            totalSaved += batch.length;
+            log.info(`Page ${page}: saved ${batch.length}. Total ${totalSaved}/${resultsWanted}.`);
+        }
 
         if (estates.length < limit) break;
         offset += limit;
     }
 
-    if (bufferedItems.length === 0) {
+    if (totalSaved === 0) {
         throw new Error('No listings were extracted. API may have changed or access may be blocked.');
     }
 
-    for (let i = 0; i < bufferedItems.length; i += PUSH_BATCH_SIZE) {
-        const batch = bufferedItems.slice(i, i + PUSH_BATCH_SIZE);
-        await Dataset.pushData(batch);
-    }
-
-    log.info(`Finished successfully. Total listings saved: ${bufferedItems.length}`);
+    log.info(`Finished successfully. Total listings saved: ${totalSaved}`);
+} catch (error) {
+    exitCode = 1;
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(`Actor failed: ${message}`);
 } finally {
-    await Actor.exit();
+    await Actor.exit({ exitCode });
 }

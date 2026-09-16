@@ -87,6 +87,15 @@
       "default": 10,
       "prefill": 10,
       "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Choose whether to use Apify Proxy or connect directly. Proxy is disabled by default.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": false
+      }
     }
   },
   "required": [],

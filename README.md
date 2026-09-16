@@ -58,6 +58,7 @@ When `keyword`, `location`, `sort`, offer type, category, or price is provided, 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `startUrl` | String | No | `https://www.sreality.cz/doporucene` | Sreality page used as the source reference. |
+| `proxyConfiguration` | Object | No | - | Optional Apify Proxy configuration for blocked cloud egress. |
 | `results_wanted` | Integer | No | `20` | Maximum number of listings to save. |
 | `max_pages` | Integer | No | `10` | Maximum number of result pages to process. |
 | `keyword` | String | No | - | Text to search in Sreality listings. |
